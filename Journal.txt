@@ -1,0 +1,21 @@
+2017-06-22
+Today I tried different kernel functions on kernel regression model. Only
+'rbf(gaussian)' and 'laplacian' kernel can generate reasonable outcome(grid
+energy value). Other kernels will generate very absurd value, I don't know
+why. 
+
+'rbf' and 'gaussian' kernels take almost the same time in predicting grid
+energy values. The trainning set is about 30,000 points. The predicting set is
+about 13,000 grid points(grid size is 0.3 accordingly). And predicting takes about 7s for both kernels. 
+
+It would take a much longer time for larger predicting set. Because increasing
+data size will cause much more 'hard page faults' and even thrashing. I guess
+it's because in the predicting function, it computes kernel value between
+every point pair(you can find it in source code). So the space complexity is
+O(mn), m is the size of training data, n is the size of predicting data.
+
+So the following work would be solving this memory issuse. One way is using
+KD-tree or other distance query efficient data structure to save space. The
+other is exploring the existing implementation to see... 
+
+Also, don't forget to use config file instead constant in the program.  

@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 from basinfinder import alpha_shape, Basin_Finder
 from descartes import PolygonPatch
-from scipy.spatial import Delaunay
+#from scipy.spatial import Delaunay
 import numpy as np
 #from statsmodels.nonparametric.kernel_regression import KernelReg
 import shapely.geometry as geometry
-from shapely.ops import cascaded_union, polygonize
+#from shapely.ops import cascaded_union, polygonize
 import math
 from kernel_regression import KernelRegression
 #import rpy2.robjects as robjects
-from sklearn.metrics import pairwise
+#from sklearn.metrics import pairwise
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+#from mpl_toolkits.mplot3d import Axes3D
 from matplotlib  import cm
 import matplotlib as mpl
 import pickle
@@ -30,42 +30,52 @@ Notes on how to make it faster:
     4.
 """
 
+s_loadData = clock()    #timing
 #load data from the .txt file
 protein_data = np.dtype([('col1', 'S20'), ('col2', 'S20'),('col3', 'S20'), ('energy', 'f4'), ('col5', 'f4'), ('col6', 'f4'),('col7', 'f4'),('col8', 'f4'),('col9', 'f4'),('col10', 'f4'),('col11', 'f4'),('col12', 'f4'),('col13', 'f4'),('col14', 'f4'),('col15', 'f4')])
-points = np.loadtxt(r"C:\Users\Administrator\Desktop\bio\Ras_WT_SoPrimp_2016.txt", dtype = protein_data)           #load data
+points = np.loadtxt(r"C:\Users\Administrator\Desktop\BasinFinder\Ras_WT_SoPrimp_2016.txt", dtype = protein_data)           #load data
 #Extrac value we care about
 energy = np.array([e[3] for e in points])         # energy
 points = np.array([[p[5], p[6]] for p in points])         #PC1 and PC2 we care about
+e_loadData = clock()    #timing
+print('Loading data takes: ', e_loadData - s_loadData)
 
+s_alphaShape = clock()      #timing
 #Draw the alpha shape from all data points
-concave_hull, edge_points = alpha_shape(points, alpha=0.6)    #concave_hull contains all the polygons (all the boundary)
+#concave_hull, edge_points = alpha_shape(points, alpha=0.6)    #concave_hull contains all the polygons (all the boundary)
+e_alphaShape = clock()
+print('Drawing alpha shape takes: ', e_alphaShape - s_alphaShape)
 
+s_grid = clock()        #timing
 #define grid points, [pc1, pc2]
-gsz = 0.1 #Grid size. Could be user input.
+gsz = 0.2 #Grid size. Could be user input.
 xgridlow, ygridlow, xgridhigh, ygridhigh = concave_hull.bounds
 xgrids =    np.arange(xgridlow - gsz, xgridhigh, gsz)
 ygrids =    np.arange(ygridlow - gsz, ygridhigh, gsz)                    #use generator or numpy
 origin_grids = [[x , y] for x in xgrids for y in ygrids]    #origin grid points, could use numpy
 native_grids = [p for p in origin_grids if geometry.Point(p).within(concave_hull)]      #grid points only in the alpha shape
-
+e_grid = clock()        #timing
+print('Generating grid points takes : ', e_grid - s_grid)
 # use kernel regression to estimate energy of grid points
 """
 This method is from github. https://github.com/jmetzen/kernel_regression/blob/master/kernel_regression.py
 The default kernel 'rbf' is gaussian kernel
 """
-kr = KernelRegression(kernel="rbf", gamma=np.logspace(-2, 2, 10))
-#kr_model = kr.fit(points, energy)   #build kernel regression modle from data points
-#middle_kernel = clock()
-#print('Fitting model takes: ', middle_kernel - start_kernel)
+s_krModel = clock()         #timing
+kernel = 'rbf'          #choose kernel function
+kr = KernelRegression(kernel=kernel, n_jobs=1, gamma=0.5)
+kr_model = kr.fit(points, energy)   #build kernel regression modle from data points
+m_krModel = clock()         #timing
+print('Fitting model takes: ', m_krModel - s_krModel)
 
 #model = open(r'C:\Users\Administrator\Desktop\kr_model.txt','wb')
 #pickle.dump(kr_model, model)
 #model.close()
 
 #Just use the saved model to save time
-model = open(r'C:\Users\Administrator\Desktop\kr_model.txt', 'rb')
-kr_model = pickle.load(model)
-model.close()
+#model = open(r'C:\Users\Administrator\Desktop\kr_model.txt', 'rb')
+#kr_model = pickle.load(model)
+#model.close()
 
 #Multiprocessing
 """
@@ -76,6 +86,7 @@ with Manager() as manager:
 print('Multithread is working!')
 """
 #Use multithread to speed up prediction of grid energy
+"""
 grid_energy = [0] * len(native_grids)
 partition = math.ceil(len(native_grids)/10) #partition the task into 10 subtasks
 
@@ -100,10 +111,11 @@ for i in range(len(threads)):
 
 for j in range(len(threads)):
     threads[j].join()
+"""
 
-
-#grid_energy = kr_model.predict(grids)   #predict energy of grid points
-
+grid_energy = kr_model.predict(np.array(native_grids))   #predict energy of grid points
+e_krModel = clock()
+print('Predicting grid energy takes(%s): ' %(kernel), e_krModel - m_krModel)
 #Now we finnaly get grid points and their energy value.
 
 
@@ -131,13 +143,15 @@ x_min, y_min, x_max, y_max = concave_hull.bounds
 ax.set_xlim([x_min-margin, x_max+margin])
 ax.set_ylim([y_min-margin, y_max+margin])
 patch = PolygonPatch(concave_hull, fc=m.to_rgba(-6270), ec='#000000', fill=True, zorder=-1)
-#surf = ax.scatter(grids[:,0], grids[:,1], c=grid_energy, cmap=cm.jet)
+np_grids = np.array(native_grids)
 ax.add_patch(patch)
-#fig.colorbar(surf, shrink=0.5, aspect=5)
+surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
+
+fig.colorbar(surf, shrink=0.5, aspect=5)
 
 
 #Run it
-Basin_Finder(native_grids, -6400, [], 0.3)
+#Basin_Finder(native_grids, -6400, [], 0.3, native_grids, grid_energy, colormap=m, figure = ax)
 
 
 

@@ -154,7 +154,7 @@ def Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, *, colormap, fi
         print('Points left:                ', len(S))
         #patch = PolygonPatch(bounds, fc=m.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
         #ax.add_patch(patch)
-        Basin_Finder(S, c, Omega, delta2)
+        Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, colormap=colormap, figure = figure)
 
     else:       #Basin splitting detected
         for i in range(k):
@@ -164,4 +164,4 @@ def Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, *, colormap, fi
             print('how many basins? ', len(Omega))  #Debug
             print('ennergy level? ', c) #Debug
             print('Now we go into a Basin!!!, # of points in this basin are:', len(S[i]))
-            Basin_Finder(S[i],c,Omega,delta2)
+            Basin_Finder(S[i], c, Omega, delta2, native_grids, grid_energy, colormap=colormap, figure = figure)
