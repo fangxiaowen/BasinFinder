@@ -14,8 +14,14 @@ it's because in the predicting function, it computes kernel value between
 every point pair(you can find it in source code). So the space complexity is
 O(mn), m is the size of training data, n is the size of predicting data.
 
+I strongly recommand you have a look at line 83 and 84 at this page (the
+kernel regression model I use).
+https://github.com/jmetzen/kernel_regression/blob/master/kernel_regression.py
+to see if  you can resolve the memory hazard caused by those 2 lines.
+
 So the following work would be solving this memory issuse. One way is using
 KD-tree or other distance query efficient data structure to save space. The
 other is exploring the existing implementation to see... 
 
-Also, don't forget to use config file instead constant in the program.  
+Also, don't forget to use config file instead constant in the program.
+  
