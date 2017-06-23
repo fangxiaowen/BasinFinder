@@ -26,4 +26,8 @@ other is exploring the existing implementation to see...
 Also, don't forget to use config file instead constant in the program.
 
 PS. Have trouble using multiprocessing in python. I cannot solve this problem.
-Need your help!  
+Need your help! 
+
+PSS. After exploring existing lib and computing the time and space complexity,
+I just think using kd-tree or ball-tree is a better solution than using other
+lib.
