@@ -7,7 +7,7 @@ import numpy as np
 import shapely.geometry as geometry
 #from shapely.ops import cascaded_union, polygonize
 import math
-from kernel_regression import KernelRegression
+from kernelregression import KernelRegression     #This is the kd_tree version written by Xiaowen Fang
 #import rpy2.robjects as robjects
 #from sklearn.metrics import pairwise
 import matplotlib.pyplot as plt
@@ -48,7 +48,7 @@ print('Drawing alpha shape takes: ', e_alphaShape - s_alphaShape)
 
 s_grid = clock()        #timing
 #define grid points, [pc1, pc2]
-gsz = 0.2 #Grid size. Could be user input.
+gsz = 0.1 #Grid size. Could be user input.
 xgridlow, ygridlow, xgridhigh, ygridhigh = concave_hull.bounds
 xgrids =    np.arange(xgridlow - gsz, xgridhigh, gsz)
 ygrids =    np.arange(ygridlow - gsz, ygridhigh, gsz)                    #use generator or numpy
@@ -62,8 +62,8 @@ This method is from github. https://github.com/jmetzen/kernel_regression/blob/ma
 The default kernel 'rbf' is gaussian kernel
 """
 s_krModel = clock()         #timing
-kernel = 'rbf'          #choose kernel function
-kr = KernelRegression(kernel=kernel, n_jobs=1, gamma=0.5)
+kernel = 'rbf'          #choose kernel function. More kernels see here  http://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.pairwise_kernels.html
+kr = KernelRegression(kernel=kernel, bandwidth=4)
 kr_model = kr.fit(points, energy)   #build kernel regression modle from data points
 m_krModel = clock()         #timing
 print('Fitting model takes: ', m_krModel - s_krModel)
