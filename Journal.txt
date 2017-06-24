@@ -38,7 +38,9 @@ lib.
 
 I implemented a kd-tree version of kernel regression and compared it with the standard kernel regression which I downloaded from github.
 
-The kd-tree version has O(m^0.5 * n) runtime complexity and O(n) space complexity. While the standard one takes O(mn) runtime and O(mn) space. m is # of sample points, n is # of grid points whose energy we need to estimate. The is a theoratical complexity analysis, so the real complexity could be vary a little bit according to different implementation.
+The kd-tree version has O(m^0.5 * n) runtime complexity and O(n) space complexity. While the standard one takes O(mn) runtime and O(mn)
+space. m is # of sample points, n is # of grid points whose energy we need to estimate. The is a theoratical complexity analysis, so the
+real complexity could be vary a little bit according to different implementation.
 
 I also read a little bit materials about kernel density estimation and kernel regression.
 
