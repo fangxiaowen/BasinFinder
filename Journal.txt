@@ -1,12 +1,13 @@
 2017-06-22
+
 Today I tried different kernel functions on kernel regression model. Only
 'rbf(gaussian)' and 'laplacian' kernel can generate reasonable outcome(grid
 energy value). Other kernels will generate very absurd value, I don't know
-why. 
+why.
 
 'rbf' and 'gaussian' kernels take almost the same time in predicting grid
 energy values. The trainning set is about 30,000 points. The predicting set is
-about 13,000 grid points(grid size is 0.3 accordingly). And predicting takes about 7s for both kernels. 
+about 13,000 grid points(grid size is 0.3 accordingly). And predicting takes about 7s for both kernels.
 
 It would take a much longer time for larger predicting set. Because increasing
 data size will cause much more 'hard page faults' and even thrashing. I guess
@@ -21,13 +22,26 @@ to see if  you can resolve the memory hazard caused by those 2 lines.
 
 So the following work would be solving this memory issuse. One way is using
 KD-tree or other distance query efficient data structure to save space. The
-other is exploring the existing implementation to see... 
+other is exploring the existing implementation to see...
 
 Also, don't forget to use config file instead constant in the program.
 
 PS. Have trouble using multiprocessing in python. I cannot solve this problem.
-Need your help! 
+Need your help!
 
 PSS. After exploring existing lib and computing the time and space complexity,
 I just think using kd-tree or ball-tree is a better solution than using other
 lib.
+
+---------------------------------------------------------------------------------------------------
+2017-06-23
+
+I implemented a kd-tree version of kernel regression and compared it with the standard kernel regression which I downloaded from github.
+
+The kd-tree version has O(m^0.5 * n) runtime complexity and O(n) space complexity. While the standard one takes O(mn) runtime and O(mn) space. m is # of sample points, n is # of grid points whose energy we need to estimate. The is a theoratical complexity analysis, so the real complexity could be vary a little bit according to different implementation.
+
+I also read a little bit materials about kernel density estimation and kernel regression.
+
+The following task would be evaluating the effect of this kd-tree kernel regression by some critieria (such as mean square error). And continue analysing Basin_Finder process.
+
+And don't forget to make this project more like a product towards public users.
