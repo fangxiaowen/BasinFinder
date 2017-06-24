@@ -44,6 +44,7 @@ real complexity could be vary a little bit according to different implementation
 
 I also read a little bit materials about kernel density estimation and kernel regression.
 
-The following task would be evaluating the effect of this kd-tree kernel regression by some critieria (such as mean square error). And continue analysing Basin_Finder process.
+The following task would be evaluating the effect of this kd-tree kernel regression by some critieria (such as mean square error). And
+continue analysing Basin_Finder process.
 
 And don't forget to make this project more like a product towards public users.
