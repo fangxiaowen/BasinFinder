@@ -48,3 +48,10 @@ The following task would be evaluating the effect of this kd-tree kernel regress
 continue analysing Basin_Finder process.
 
 And don't forget to make this project more like a product towards public users.
+
+---------------------------------------------------------------------------------------------------
+2017-06-24
+
+Read more about kernel regression and kernel smoothing. Also read about multiprocessing.
+
+Will try to use multiprocessing to speed up Basin_Finder tomorrow.
