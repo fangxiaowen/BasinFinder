@@ -13,8 +13,8 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 
 class KernelRegression(BaseEstimator, RegressorMixin):
-    """Nadaraya-Watson kernel regression with automatic bandwidth selection.
-    
+    """Nadaraya-Watson kernel regression with kd-tree.
+
     Parameters
     ----------
     kernel : string or callable, default="rbf"
@@ -31,10 +31,10 @@ class KernelRegression(BaseEstimator, RegressorMixin):
     See also
     --------
     sklearn.metrics.pairwise.kernel_metrics : List of built-in kernels.
-    """   
-    
-    
-    def __init__(self, kernel="rbf", bandwidth=0.7, ):
+    """
+
+
+    def __init__(self, kernel="rbf", bandwidth=0.7):
         self.kernel = kernel
         self.bandwidth = bandwidth
 
@@ -53,7 +53,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         self.X = X
         self.y = y
-        self.tree = KDTree(X, leaf_size=2) 
+        self.tree = KDTree(X, leaf_size=2)
         return self
 
     def predict(self, X):
@@ -69,16 +69,16 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         """
         li = []
         ind = self.tree.query_radius(X, r=self.bandwidth)
-        print(ind)
+        #print(ind)
         for i in range(len(X)):
             #compute kernel between grid point and all the data points near it
             try:
-                K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=self.bandwidth)    
+                K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
             except ValueError as e:
-                print('The indices of neighbors are', ind[i])
-                print('What?? the lonely grid point is', X[i])
-                
+                print('The indices of neighbors are empty! ', ind[i])
+                print('The lonely grid point is', X[i])
+
             estimator = np.inner(K, self.y[ind[i]]) / np.sum(K)
             li.append(estimator)
         return li
-            
+
