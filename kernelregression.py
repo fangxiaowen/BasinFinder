@@ -6,12 +6,15 @@ Created on Fri Jun 23 08:54:10 2017
 
 This file implements kernel regression using kd-tree
 """
-
 from sklearn.neighbors import KDTree
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics.pairwise import pairwise_kernels
+from sklearn.externals.joblib import Parallel, delayed
+from sklearn.utils import gen_even_slices
 
+from multiprocessing import cpu_count
+import sys
 class KernelRegression(BaseEstimator, RegressorMixin):
     """Nadaraya-Watson kernel regression with kd-tree.
 
@@ -57,6 +60,21 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
+        li = []
+        ind = self.tree.query_radius(X, r=self.bandwidth)
+        for i in range(len(X)):
+        #compute kernel between grid point and all the data points near it
+            try:
+                K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
+            except ValueError as e:
+                print('The indices of neighbors are empty! ', ind[i])
+                print('The lonely grid point is', X[i])
+
+            estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
+            li.append(estimator)
+        return li
+        
+    def parallel_predict(self, X, n_jobs):
         """Predict target values for X.
         Parameters
         ----------
@@ -66,19 +84,22 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         -------
         y : array of shape = [n_samples]
             The predicted target value.
+        
+        n_jobs : level of parallelism
         """
-        li = []
-        ind = self.tree.query_radius(X, r=self.bandwidth)
-        #print(ind)
-        for i in range(len(X)):
-            #compute kernel between grid point and all the data points near it
-            try:
-                K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
-            except ValueError as e:
-                print('The indices of neighbors are empty! ', ind[i])
-                print('The lonely grid point is', X[i])
+            
+        if n_jobs < 0:
+            n_jobs = max(cpu_count() + 1 + n_jobs, 1)
+        
+        if n_jobs == 1:
+        # Special case without multiprocessing parallelism
+            return self.predict(X)
 
-            estimator = np.inner(K, self.y[ind[i]]) / np.sum(K)
-            li.append(estimator)
-        return li
-
+        fd = delayed(self.predict)
+        ret = Parallel(n_jobs=n_jobs, verbose=0)(
+            fd(X[s])
+            for s in gen_even_slices(X.shape[0], n_jobs))
+        #print('What is the returnvalue? ', ret[0][:100])
+        ret = [np.hstack(li) for li in ret]
+        return np.hstack(ret)
+        #sys.exit(0)

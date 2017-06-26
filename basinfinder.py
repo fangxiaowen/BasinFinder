@@ -103,21 +103,21 @@ def Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, colormap, job_l
         print('I am returning', len(S), c)  #Debug message
         return
     try:
-        bounds, edge_points = alpha_shape(S, alpha = 3)    #alpha shape
+        bounds, edge_points = alpha_shape(S, alpha = 6)    #alpha shape
     except TypeError as e:
         print("What's wrong with S : ", S)
         sys.exit(0)
     k = 1 if not isinstance(bounds, geometry.multipolygon.MultiPolygon) else len(bounds)    #weather it's a single polygon or multiple polygons in the alpha shape
 
     #no basin splitting detected
-    print('# of basin is ', k)   #Debug message
+    print('# of basin in this iteration is ', k)   #Debug message
     if k == 1:
         if c > - 6500:
             c -= delta2 * 20    #make it decending faster
         else:
             c -= delta2
         # find points under updated energy level c
-        S = [p for p in S if grid_energy[native_grids.index(p)] < c]      #points with energy less than c. Could be faster?
+        S = [p for p in S if grid_energy[native_grids.index(p)] < c]      #points with energy less than c. Could be faster? Must be faster! Optimize this!
         print('Oh! We got S under c! Good!')
         job_list.put_nowait((k,S,c))
 

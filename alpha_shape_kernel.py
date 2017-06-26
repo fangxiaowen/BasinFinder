@@ -88,7 +88,7 @@ for j in range(len(threads)):
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     print('oaky here?')
-    manager = Manager()
+    #manager = Manager()
     print('still okay here? Manager Object is created successfully!')
     
     s_loadData = clock()    #timing
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     e_grid = clock()        #timing
     print('Generating grid points takes : ', e_grid - s_grid)
     
-    native_grids = manager.list(native_grids)   #make native_grids shared between processes
+    #native_grids = manager.list(native_grids)   #make native_grids shared between processes
     # use kernel regression to estimate energy of grid points
     """
     The default kernel 'rbf' is gaussian kernel
@@ -130,12 +130,12 @@ if __name__ == '__main__':
     m_krModel = clock()         #timing
     print('Fitting model takes: ', m_krModel - s_krModel)
     
-    grid_energy = kr_model.predict(np.array(native_grids))   #predict energy of grid points
+    grid_energy = kr_model.parallel_predict(np.array(native_grids), n_jobs=-1)   #predict energy of grid points
     e_krModel = clock()
     print('Predicting grid energy takes(%s): ' %(kernel), e_krModel - m_krModel)
     #Now we finnaly get grid points and their energy value.
     print('Good to share grid energy?')
-    grid_energy = manager.list(grid_energy)
+    #grid_energy = manager.list(grid_energy)
     print('Good! grid energy shared!')
     #ge = open(r'C:\Users\Administrator\Desktop\grid_energy.txt','wb')
     #pickle.dump(grid_energy, ge)
@@ -164,16 +164,17 @@ if __name__ == '__main__':
     patch = PolygonPatch(concave_hull, fc=m.to_rgba(-6270), ec='#000000', fill=True, zorder=-1)
     np_grids = np.array(native_grids)
     ax.add_patch(patch)
-    #surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
+    surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
 
-    #fig.colorbar(surf, shrink=0.5, aspect=5)
-    
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    """
     #Run it
     print('Okay to create basins list?')
     job_list = manager.Queue()
     basins = manager.list()
     Omega = manager.list()
     print('Now basin finder!!!')
+    
     p = Pool(4)
     
     s_basin = clock()
@@ -183,7 +184,7 @@ if __name__ == '__main__':
         k, S, c = job_list.get_nowait()
         p.apply_async(Basin_Finder, args=(S, c, Omega, 0.3, native_grids, grid_energy, m, job_list, basins))
         sleepTime = 0
-        while job_list.empty() and sleepTime < 20:
+        while job_list.empty() and sleepTime < 350:
             sleepTime += 1
             time.sleep(1)
             print('Sleep %d s ' % (sleepTime))
@@ -197,4 +198,5 @@ if __name__ == '__main__':
     print('how many basins? ', len(basins))
     f_basin = clock()
     print('Basin Finder takes(with multiprocessing) : ', f_basin - s_basin)
-    fig.savefig(r'C:\Users\Administrator\Desktop\grid_energy_boundary_5.png')
+    """
+    fig.savefig(r'C:\Users\Administrator\Desktop\grid_energy_6.png')
