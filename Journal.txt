@@ -55,3 +55,11 @@ And don't forget to make this project more like a product towards public users.
 Read more about kernel regression and kernel smoothing. Also read about multiprocessing.
 
 Will try to use multiprocessing to speed up Basin_Finder tomorrow.
+
+---------------------------------------------------------------------------------------------------
+2017-06-25
+
+Implemented multiprocessing for Basin_Finder. But it doesn't save too much time. Because
+Basin_Finder takes a long time to generate next task to feed a free processor. So most of
+the time it only uses 1 processor. The time saving on multiprocessing is meaningless. It
+takes 2.5 hrs on my computer. But I could optimize some part of it to save time.
