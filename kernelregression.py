@@ -12,7 +12,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.utils import gen_even_slices
-
+from scipy.spatial import distance
 from multiprocessing import cpu_count
 import sys
 class KernelRegression(BaseEstimator, RegressorMixin):
@@ -37,9 +37,15 @@ class KernelRegression(BaseEstimator, RegressorMixin):
     """
 
 
-    def __init__(self, kernel="rbf", bandwidth=0.7):
+    def __init__(self, kernel="gaussian", bandwidth=0.7, radius=3):
+            # Helper functions - distance
+        
+        #self.kernel = self.kernel_dict[kernel]
         self.kernel = kernel
         self.bandwidth = bandwidth
+        self.radius = radius
+
+    
 
     def fit(self, X, y):
         """Fit the model
@@ -60,16 +66,50 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         return self
 
     def predict(self, X):
+        def gaussian_kernel(x, Y):
+            dist = distance.cdist(x,Y)
+            dist = - dist**2 / (2* self.bandwidth**2)
+            return np.exp(dist)
+    
+        def epanechnikov_kernel(x, y):
+            dist = distance.cdist(x,y)
+            #dist[dist > self.bandwidth] = self.bandwidth
+            dist = (dist**2) / (self.radius**2)
+            return 1 - dist
+    
+        def tricube_kernel(x, y):
+            dist = distance.cdist(x,y)
+            #dist[dist > self.bandwidth] = self.bandwidth
+            dist /= self.radius
+            dist = (1 - dist ** 3) ** 3
+            return 70/81 * dist
+        def triweight_kernel(x,y):
+            dist = distance.cdist(x,y)
+            dist = (dist**2) / (self.radius**2)
+            dist = (1 - dist) ** 3
+            return 35/32 * dist
+            
+        KERNEL_DICT = {
+        'gaussian': gaussian_kernel,
+        'epanechnikov': epanechnikov_kernel,
+        'tricube': tricube_kernel, 
+        'triweight' : triweight_kernel }
+        kernel = KERNEL_DICT[self.kernel]
+        
         li = []
-        ind = self.tree.query_radius(X, r=self.bandwidth)
+        ind = self.tree.query_radius(X, r=self.radius)
+        
         for i in range(len(X)):
         #compute kernel between grid point and all the data points near it
             try:
-                K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
+                #K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
+                Y = self.X[ind[i]]
+                K = kernel(X[i].reshape(1,-1), Y)
+                #K = list(map(kernel, [(X[i], y) for y in Y]))
             except ValueError as e:
                 print('The indices of neighbors are empty! ', ind[i])
                 print('The lonely grid point is', X[i])
-
+                sys.exit()
             estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
             li.append(estimator)
         return li
@@ -103,3 +143,6 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         ret = [np.hstack(li) for li in ret]
         return np.hstack(ret)
         #sys.exit(0)
+        
+
+
