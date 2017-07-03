@@ -1,23 +1,18 @@
 # -*- coding: utf-8 -*-
 from basinfinder import alpha_shape, Basin_Finder
-import basinfinder
 from descartes import PolygonPatch
-#from scipy.spatial import Delaunay
 import numpy as np
-#from statsmodels.nonparametric.kernel_regression import KernelReg
 import shapely.geometry as geometry
 #from shapely.ops import cascaded_union, polygonize
 import math
 from kernelregression import KernelRegression     #This is the kd_tree version written by Xiaowen Fang
 #import rpy2.robjects as robjects
-#from sklearn.metrics import pairwise
 import matplotlib.pyplot as plt
-#from mpl_toolkits.mplot3d import Axes3D
 from matplotlib  import cm
 import matplotlib as mpl
 import pickle
 from time import clock
-from multiprocessing import Process, Manager, Array, Pool
+from multiprocessing import Process, Manager, Array, Pool, Lock
 import multiprocessing
 import os
 import time, threading
@@ -33,77 +28,28 @@ Notes on how to make it faster:
     3. Use functional programming / module from third party to reduce code
     4.
 """
-#model = open(r'C:\Users\Administrator\Desktop\kr_model.txt','wb')
-#pickle.dump(kr_model, model)
-#model.close()
-
-#Just use the saved model to save time
-#model = open(r'C:\Users\Administrator\Desktop\kr_model.txt', 'rb')
-#kr_model = pickle.load(model)
-#model.close()
-
-#Multiprocessing
-"""
-with Manager() as manager:
-    total_grid_energy = manager.list(range(len(native_grids)))
-    print("What's wrong with manager?")
-    Omega = manager.list()
-print('Multithread is working!')
-"""
-#Use multithread to speed up prediction of grid energy
-"""
-grid_energy = [0] * len(native_grids)
-partition = math.ceil(len(native_grids)/10) #partition the task into 10 subtasks
-
-#method to do prediction on subtask
-def addEnergy(grids, index):
-    print('thread %s is running...' % threading.current_thread().name)
-    global grid_energy
-    global partition
-    global kr_model
-    grid_energy[i*partition:(i+1)*partition] = kr_model.predict(grids).tolist()
-    print(grid_energy[i*partition : i*partition + 10])
-    return
-
-#multithreading
-threads = []
-for i in range(10):
-    t = threading.Thread(target=addEnergy, args=(native_grids[i*partition:(i+1)*partition], i), name='kr thread')
-    threads.append(t)
-
-for i in range(len(threads)):
-    threads[i].start()
-
-for j in range(len(threads)):
-    threads[j].join()
-"""
-
-
-
-
-
-
-
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
     print('oaky here?')
-    #manager = Manager()
+    manager = Manager()
+    lock = Lock()
     print('still okay here? Manager Object is created successfully!')
     
     s_loadData = clock()    #timing
     #load data from the .txt file
     protein_data = np.dtype([('col1', 'S20'), ('col2', 'S20'),('col3', 'S20'), ('energy', 'f4'), ('col5', 'f4'), ('col6', 'f4'),('col7', 'f4'),('col8', 'f4'),('col9', 'f4'),('col10', 'f4'),('col11', 'f4'),('col12', 'f4'),('col13', 'f4'),('col14', 'f4'),('col15', 'f4')])
-    points = np.loadtxt(r"C:\Users\Administrator\Desktop\BasinFinder\Ras_WT_SoPrimp_2016.txt", dtype = protein_data)           #load data
+    sample_points = np.loadtxt(r"C:\Users\Administrator\Desktop\BasinFinder\Ras_WT_SoPrimp_2016.txt", dtype = protein_data)           #load data
     #Extrac value we care about
-    energy = np.array([e[3] for e in points])         # energy
-    points = np.array([[p[5], p[6]] for p in points])         #PC1 and PC2 we care about
+    energy = np.array([e[3] for e in sample_points])         # energy
+    #points = np.array([[p[5], p[6], ] for p in sample_points])         #PC1 and PC2 we care about
+    points = np.array([[p[5], p[6], i] for i, p in enumerate(sample_points)])
     e_loadData = clock()    #timing
     print('Loading data takes: ', e_loadData - s_loadData)
 
     s_alphaShape = clock()      #timing
     #Draw the alpha shape from all data points
-    concave_hull, edge_points = alpha_shape(points, alpha=0.6)    #concave_hull contains all the polygons (all the boundary)
+    concave_hull, edge_points = alpha_shape(np.delete(points, 2, 1), alpha=0.6)    #concave_hull contains all the polygons (all the boundary)
     e_alphaShape = clock()
     print('Drawing alpha shape takes: ', e_alphaShape - s_alphaShape)
     
@@ -114,29 +60,40 @@ if __name__ == '__main__':
     xgrids =    np.arange(xgridlow - gsz, xgridhigh, gsz)
     ygrids =    np.arange(ygridlow - gsz, ygridhigh, gsz)                    #use generator or numpy
     origin_grids = [[x , y] for x in xgrids for y in ygrids]    #origin grid points, could use numpy
-    native_grids = [p for p in origin_grids if geometry.Point(p).within(concave_hull)]      #grid points only in the alpha shape
+    #origin_grids = [[p[0], p[1], i] for i, p in enumerate(origin_grids)]
+    native_grids = np.array([p for p in origin_grids if geometry.Point(p).within(concave_hull)])      #grid points only in the alpha shape
+    native_grids = np.array([[p[0], p[1], i] for i,p in enumerate(native_grids)])
     e_grid = clock()        #timing
     print('Generating grid points takes : ', e_grid - s_grid)
     
-    #native_grids = manager.list(native_grids)   #make native_grids shared between processes
     # use kernel regression to estimate energy of grid points
     """
     The default kernel 'rbf' is gaussian kernel
     """
     s_krModel = clock()         #timing
-    kernel = 'rbf'          #choose kernel function. More kernels see here  http://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.pairwise_kernels.html
-    kr = KernelRegression(kernel=kernel, bandwidth=3)
-    kr_model = kr.fit(points, energy)   #build kernel regression modle from data points
+    kernel = 'gaussian'          #choose kernel function. More kernels see here  http://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.pairwise_kernels.html
+    try:
+        kr = KernelRegression(kernel=kernel, bandwidth=0.7, radius=3)
+    except BaseException as e:
+        print("What's wrong with kernel reg?")
+    kr_model = kr.fit(np.delete(points, 2, 1), energy)   #build kernel regression modle from data points
     m_krModel = clock()         #timing
     print('Fitting model takes: ', m_krModel - s_krModel)
-    
-    grid_energy = kr_model.parallel_predict(np.array(native_grids), n_jobs=-1)   #predict energy of grid points
-    e_krModel = clock()
+    #try:
+    grid_energy = kr_model.parallel_predict(np.delete(native_grids,2,1), n_jobs=-1)   #predict energy of grid points
+    #except BaseException as e:
+    #    print("Prediction is wrong!")
+    c_min = np.amin(grid_energy)
+    print('c_min is  : ', c_min)
+    e_krModel = clock()     
     print('Predicting grid energy takes(%s): ' %(kernel), e_krModel - m_krModel)
     #Now we finnaly get grid points and their energy value.
-    print('Good to share grid energy?')
-    #grid_energy = manager.list(grid_energy)
-    print('Good! grid energy shared!')
+    
+    native_grids = np.insert(native_grids, 3, grid_energy, axis=1)
+    print('Good to share grids and grid energy?')
+    #native_grids = manager.list(native_grids)   #make native_grids shared between processes
+    grid_energy = manager.list(grid_energy)
+    print('Good! grids and grid energy shared!')
     #ge = open(r'C:\Users\Administrator\Desktop\grid_energy.txt','wb')
     #pickle.dump(grid_energy, ge)
     #ge.close()
@@ -150,7 +107,7 @@ if __name__ == '__main__':
     #Generate some plot
 
     #This the the color map
-    norm = mpl.colors.Normalize(vmin=-6600, vmax=-6250)
+    norm = mpl.colors.Normalize(vmin=-6670, vmax=-6350)
     cmap = cm.jet
     m = cm.ScalarMappable(norm=norm, cmap=cmap)
 
@@ -162,15 +119,16 @@ if __name__ == '__main__':
     ax.set_xlim([x_min-margin, x_max+margin])
     ax.set_ylim([y_min-margin, y_max+margin])
     patch = PolygonPatch(concave_hull, fc=m.to_rgba(-6270), ec='#000000', fill=True, zorder=-1)
-    np_grids = np.array(native_grids)
+    #np_grids = np.array(native_grids)
     ax.add_patch(patch)
-    surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
-
-    fig.colorbar(surf, shrink=0.5, aspect=5)
-    """
+    #surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
+    #surf2 = ax.scatter(points[:,0], points[:,1], c=energy, cmap=cm.jet)
+    
+    #fig.colorbar(surf, shrink=0.5, aspect=5)
+    #fig.savefig(r'C:\Users\Administrator\Desktop\kernelReg_' + kernel + '_.png')
     #Run it
     print('Okay to create basins list?')
-    job_list = manager.Queue()
+    job_list = manager.Queue(10)
     basins = manager.list()
     Omega = manager.list()
     print('Now basin finder!!!')
@@ -178,25 +136,27 @@ if __name__ == '__main__':
     p = Pool(4)
     
     s_basin = clock()
-    Basin_Finder(native_grids, -6400, Omega, 0.3, native_grids, grid_energy, m, job_list, basins)
+    Basin_Finder(native_grids, -6403, Omega, 0.3, m, job_list, basins, True)
+    
+    wait_for_job = 160
+    
 
-    while not job_list.empty():
-        k, S, c = job_list.get_nowait()
-        p.apply_async(Basin_Finder, args=(S, c, Omega, 0.3, native_grids, grid_energy, m, job_list, basins))
-        sleepTime = 0
-        while job_list.empty() and sleepTime < 350:
-            sleepTime += 1
-            time.sleep(1)
-            print('Sleep %d s ' % (sleepTime))
-        print('are you empty? ', job_list.empty())       
+    done = False
+    while not done:
+        try:
+            k, S, c, jump = job_list.get(True, wait_for_job)
+            p.apply_async(Basin_Finder, args=(S, c, Omega, 0.3, m, job_list, basins, jump))
+        except BaseException as e:
+            print('Done')
+            done = True
     p.close()
     p.join()
     
     for basin in basins:
         ax.add_patch(basin)
-        print('okay now I add one patch')
+        #print('okay now I add one patch')
     print('how many basins? ', len(basins))
     f_basin = clock()
     print('Basin Finder takes(with multiprocessing) : ', f_basin - s_basin)
-    """
+    
     fig.savefig(r'C:\Users\Administrator\Desktop\grid_energy_6.png')

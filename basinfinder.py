@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Tue Jun 20 15:04:57 2017
-
-@author: Xiaowen Fang
-"""
 
 __author__ = 'Xiaowen Fang'
 
@@ -16,8 +11,9 @@ import math
 from descartes import PolygonPatch
 #from matplotlib  import cm
 import sys
-from multiprocessing import Process, Manager, Array, Pool
+from multiprocessing import Process, Manager, Array, Pool, Lock
 import multiprocessing
+from time import clock
 
 #This is also from http://blog.thehumangeo.com/2014/05/12/drawing-boundaries-in-python/
 def alpha_shape(points, alpha):
@@ -30,6 +26,7 @@ def alpha_shape(points, alpha):
         don't fall inward as much as larger numbers.
         Too large, and you lose everything!
     """
+    print('Now you are in alpha shape computing process')
     if len(points) < 4:
         # When you have a triangle, there is no sense
         # in computing an alpha shape.
@@ -85,7 +82,7 @@ def alpha_shape(points, alpha):
 
 
 #The main basin finder algorithm
-def Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, colormap, job_list, basins):
+def Basin_Finder(S, c, Omega, delta2, colormap, job_list, basins, jump):
     """
     The main algorithm to find basins and saddles
 
@@ -97,86 +94,108 @@ def Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, colormap, job_l
     delta2 : step length c decreases
     """
     #global basins
-    #global job_list
-    #global ax
-    if len(S) <= 3:    #Just want to end it earlier if less than 4 points
-        print('I am returning', len(S), c)  #Debug message
-        return
+    
+    print('now you are in basin_finder')
+    if c < -6368:       #no jump after certain level
+        jump = False
+    S_origin = np.copy(S)
+    #Jump test
+    c = (c - delta2 * 50) if jump else (c - delta2) 
+    print('This is C! ', c)
+    s_under = clock()
+    S = np.array([p for p in S if p[3] < c])      #points with energy less than c. Could be faster? Must be faster! Optimize this!
+    f_under = clock()
+    print('compting points under c takes : ', f_under - s_under)
+    print('# of points after decending energy : ', len(S))
+    
+    if len(S) < 3:    #Just want to end it earlier if less than 100 points in a high energy level
+        print('Unimportant basin. I am returning', len(S), c)  #Debug message
+        return    
     try:
-        bounds, edge_points = alpha_shape(S, alpha = 6)    #alpha shape
-    except TypeError as e:
+        s_ashape = clock()
+        bounds, edge_points = alpha_shape(np.delete(S, [2,3], 1), alpha=1/0.15)    #alpha shape
+        f_ashape = clock()
+        print('computing alpha shape takes : ', f_ashape - s_ashape)
+    except BaseException as e:
         print("What's wrong with S : ", S)
-        sys.exit(0)
+        return    
+            
     k = 1 if not isinstance(bounds, geometry.multipolygon.MultiPolygon) else len(bounds)    #weather it's a single polygon or multiple polygons in the alpha shape
 
     #no basin splitting detected
     print('# of basin in this iteration is ', k)   #Debug message
     if k == 1:
-        if c > - 6500:
-            c -= delta2 * 20    #make it decending faster
-        else:
-            c -= delta2
-        # find points under updated energy level c
-        S = [p for p in S if grid_energy[native_grids.index(p)] < c]      #points with energy less than c. Could be faster? Must be faster! Optimize this!
-        print('Oh! We got S under c! Good!')
-        job_list.put_nowait((k,S,c))
-
+        print('Still no basin splitting. And continue the previous action!')
+        print('# of points left is : ', len(S))
+        
+        job_list.put((k,S,c,jump))     #no basin splitting. So still follow the jump condition as before
+        
+        print('We put you in job_list, continue the same action')
+        
     #basin splitting detected
     else:
-        #get points in different basins. Stored in S
-        old_S = S[:]
-        S = []
-        for i in range(k):
-            points_in_basin = [p for p in old_S if geometry.Point(p).within(bounds[i])]
-            job_list.put_nowait((k,points_in_basin,c))
-            old_S = [p for p in old_S if p not in points_in_basin]
-            #print('How many points in each basin? ', len(x))
-            print('We got points in a basin! Very good!')
-            S.append(points_in_basin)     #append the points in a polygon
-    
-    print('We put stuff into jobList!VeryGood! So are you empty now? ', job_list.empty())
+        if jump:    # So we need to revert back
+            print('Ohhh! We need to revert back!')
+            c += 49 * delta2
+            s_under = clock()
+            S = [p for p in S_origin if p[3] < c]      #points with energy less than c. Could be faster? Must be faster! Optimize this!
+            f_under = clock()
+            print('compting points under c takes : ', f_under - s_under)
+            print('# points left after reverting back should be greater than before : ', len(S))
+            try:
+                s_ashape = clock()
+                bounds, edge_points = alpha_shape(np.delete(S, [2,3], 1), alpha=1/0.15)    #alpha shape
+                f_ashape = clock()
+                print('computing alpha shape takes : ', f_ashape - s_ashape)   
+            except BaseException as e:
+                print("What's wrong with S : ", S)
+                return  
+            k = 1 if not isinstance(bounds, geometry.multipolygon.MultiPolygon) else len(bounds)    #weather it's a single polygon or multiple polygons in the alpha shape
+            if k == 1:
+                print('Oh! Not find basin after revert back! So we need to decend carefully to find basin')
+                print('So # of points is : ', len(S))
+                job_list.put((k,S,c,False))  #decending carefully until you find me!
+                print('We put you in job_list, decending carefully')
+                #patch = PolygonPatch(bounds, fc=colormap.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
+                #basins.append(patch)
+            else:   #Ohhh! You find me!
+                print('Good! you find me right after revert back!')
+                old_S = S[:]
+                S = []
+                for i in range(k):
+                    points_in_basin = [p.tolist() for p in old_S if geometry.Point([p[0], p[1]]).within(bounds[i])]
+                    #print('WTF??? points in basin is :', points_in_basin)
+                    job_list.put_nowait((k,points_in_basin,c, True))    # k is meaningless. Should delete k
+                    print('Put you in job_list. You are so lucky! ', i)
+                    old_S = [p for p in old_S if p.tolist() not in points_in_basin]
+                    
+                    #print('We put stuff into jobList! VeryGood! So are you empty now? ', job_list.empty())
+
+        else:   #no need to revert
+            #get points in different basins. Stored in S   
+            print('Find basins and no need to revert back')
+            old_S = S[:]
+            S = []
+            for i in range(k):
+                print('!!!!!!! # of K is ', k)
+                points_in_basin = [p.tolist() for p in old_S if geometry.Point([p[0], p[1]]).within(bounds[i])]
+                job_list.put((k,points_in_basin,c,True))
+                old_S = [p for p in old_S if p.tolist() not in points_in_basin]
+                    #print('How many points in each basin? ', len(x))
+                    #print('We got points in a basin! Very good!')
+                    #S.append(points_in_basin)     #append the points in a polygon
+                print('Put you in job_list. Finally find you, basin!  ',  i)
+                #print('We put stuff into jobList! VeryGood! So are you empty now? ', job_list.empty())
         #get saddles between neighbor basins
         #Could speed up by this way https://gis.stackexchange.com/questions/226085/fast-minimum-distance-between-two-sets-of-polygons/226143#226143
 
         #Pseudo code below. To be done
-    """
-        # distance_matriex is a n*n matrix : n is the size of bounds/basins
-        distance_matrixes = [pairwise.pairwise_distances(X=S[i], Y=S[j], metric='euclidean', n_jobs=-1) for i in range(k) for j in range(k)]   #all distance matrixes
-        old_distance_matrixes = np.array(distance_matrixes).reshape(k,k)       #could be wrong
-        distance_matrixes = map(np.matrix.min(), distance_matrixes) #the shortest distance between 2 basins/bounds
-        distance_matrixes = map(lambda x: -1 if (x > 20*0.6) or (x == 0) else x, distance_matrixes)
-        try:
-            distance_matrixes = np.array(distance_matrixes).reshape(k,k)    #reshape distance_matrixes to n*n matrix
-        except TypeError as e:
-            print('wtf???')
-        #point_pairs = [np.where(old_distance_matrixes[i][j] == distance_matrixes[i][j]) for i in range(k) for j in range(k)].reshape(k.k)      #points in two polygons having shortest distance
-        #saddles = map(lambda x, y: ((x[0]+y[0])/2, (x[1]+y[1])/2), [S[i][point_pairs[i][j][0]], S[j][point_pairs[i][j][1]] for i in S for j in S])
+    
 
-        #add saddles and basin bounds to Omega
-        #Omega.append(saddles)
-        """
-    if not isinstance(bounds, geometry.multipolygon.MultiPolygon):  #No basin splitting detected
-        print('ennergy level? ', c) #Debug
-        print('how many basins so far? ', len(basins))  #debug
-        print('Still not into Basin!')
-        print('Points left:                ', len(S))
-        #patch = PolygonPatch(bounds, fc=m.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
-        #ax.add_patch(patch)
-        #Basin_Finder(S, c, Omega, delta2, native_grids, grid_energy, colormap=colormap)
-    
-    else:       #Basin splitting detected
+    if k > 1:
         for i in range(k):
-            Omega.append(S[i])
             patch = PolygonPatch(bounds[i], fc=colormap.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
-            basins.append(patch)
-            print('Now we add a basin to basins! ', len(basins))
-            #ax.add_patch(patch)     #Plot the boundaries of each basin
-            print('how many basins? ', len(Omega))  #Debug
-            print('ennergy level? ', c) #Debug
-            #print('Now we go into a Basin!!!, # of points in this basin are:', len(S[i]))
-            #p.apply_async(Basin_Finder, args=(S[i], c, Omega, delta2, native_grids, grid_energy, colormap))
-            #Basin_Finder(S[i], c, Omega, delta2, native_grids, grid_energy, colormap, figure)
-    
-    #p.close()
-    #p.join()
+            basins.append(patch)    
+            print('We add a patch/basin!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    return
 
