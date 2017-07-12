@@ -9,7 +9,7 @@ This file implements kernel regression using kd-tree
 from sklearn.neighbors import KDTree
 import numpy as np
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.metrics.pairwise import pairwise_kernels
+#from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.externals.joblib import Parallel, delayed
 from sklearn.utils import gen_even_slices
 from scipy.spatial import distance
@@ -65,6 +65,43 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         self.tree = KDTree(X, leaf_size=2)
         return self
 
+    def predict_single(self, X):
+        X = X.reshape(1,-1)
+        assert(len(X) == 1)
+        return self.predict(X)[0]
+    
+    #gradient of a point
+    def fprime(self, X):
+        #print('X is : ', X)
+        X = X.reshape(1,-1)
+        assert(len(X) == 1)
+        try:
+            ind = self.tree.query_radius(X, r=self.radius)[0]
+            sample = self.X[ind]
+        except BaseException as e:
+            #print('ind is ? ', X)
+            return np.array([10000, 10000])
+        
+        var = np.repeat(X, len(sample), axis=0)
+        exponential = -(((var - sample) ** 2).sum(axis=1)) / (2*(self.bandwidth**2))
+        chain = np.repeat(X[0][0], len(sample), axis=0) - sample[:,0]
+        #print('var shape, sample shape, exponential shape : ', var.shape, sample.shape, exponential.shape, exponential)
+
+        num1 = (-np.exp(exponential) * chain / (self.bandwidth**2) * self.y[ind]).sum()
+        num2 = np.exp(exponential).sum()    
+        num3 = (-np.exp(exponential) * chain / (self.bandwidth**2)).sum()    
+        num4 = (np.exp(exponential) *  self.y[ind]).sum()
+        
+        fxn = (num1*num2-num3*num4)/num2 ** 2
+        
+        chain = np.repeat(X[0][1], len(sample)) - sample[:,1]
+        
+        num1 = (-np.exp(exponential) * chain / (self.bandwidth**2) * self.y[ind]).sum()
+        num3 = (-np.exp(exponential) * chain / (self.bandwidth**2)).sum()    
+        fyn = (num1*num2-num3*num4)/num2 ** 2
+        
+        return np.array((fxn, fyn))
+    
     def predict(self, X):
         def gaussian_kernel(x, Y):
             dist = distance.cdist(x,Y)
@@ -110,8 +147,11 @@ class KernelRegression(BaseEstimator, RegressorMixin):
                 print('The indices of neighbors are empty! ', ind[i])
                 print('The lonely grid point is', X[i])
                 sys.exit()
-            estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
-            li.append(estimator)
+            try:
+                estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
+                li.append(estimator)
+            except ValueError as e:
+                print('What is wrong with kernel reg? ', K)
         return li
         
     def parallel_predict(self, X, n_jobs):
@@ -145,4 +185,5 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         #sys.exit(0)
         
 
-
+    
+    
