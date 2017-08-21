@@ -17,6 +17,99 @@ import numdifftools as nd
 import math
 import pickle
 import time
+from matplotlib import _cntr as cntr
+
+intersec_point_x1, intersec_point_x2 = 0,0
+def find_exact_saddle(x):
+    """
+    start from approximate saddle point and find it's conresponding accurate saddle point
+    Parameters:
+        - x : 2D point
+    Returns:
+        2D saddle point
+    """
+    slt = 0.01
+    i = 0
+    print('Origin gradient is : ', G(x))
+    while not ((abs(G(x)[0]) < 0.1) and (abs(G(x)[1]) < 0.1) and (np.linalg.eigvals(H(x)).prod() < 0)) and i < 20:
+        i += 1
+        x_corrector = -H(x)[0][0] if G(x)[0] > 0 else H(x)[0][0]
+        y_corrector = -H(x)[1][1] if G(x)[1] > 0 else H(x)[1][1]
+        corrector = np.array([x_corrector, y_corrector])  #fxx and fyy
+        x = x + slt * normalize(corrector.reshape(1,-1))[0] # So we can get a more accurate saddle point
+    
+        print('Gradient of x is : ', G(x))
+    return x
+
+def find_contour(x):
+    """
+    start from saddle and find contour passing the saddle
+    Parameters:
+        - x : 2D point
+    Returns:
+        2D saddle point
+    """
+    global intersec_point_x1
+    global intersec_point_x2
+    print('X is : ', x)
+    origin_energy = kr_model.predict_single(x)
+    #origin_energy = -6562
+    print('Origin energy is : ', origin_energy)
+    egienvector = np.linalg.eig(H(x))[1][1]
+    x1, x2 = x + 0.5*egienvector, x - 0.5*egienvector
+    intersec_point_x1, intersec_point_x2 = x1, x2
+    inter_x1_energy, inter_x2_energy = kr_model.predict_single(intersec_point_x1), kr_model.predict_single(intersec_point_x2)
+    slt = 0.1
+    #trace_x1, trace_x2 = [], []
+    """
+    while(not (kr_model.predict_single(x1) - origin_energy) < 1): 
+        #gradient desending
+        if kr_model.predict_single(x1) > origin_energy:
+            x1 -= slt * normalize(G(x1).reshape(1,-1))[0]
+        else:
+            x1 += slt * normalize(G(x1).reshape(1,-1))[0]
+        print('Now you should be closer to origin energy : ', kr_model.predict_single(x1))
+    """
+    while(True):
+        tagent = np.array([G(x1)[1], -G(x1)[0]])    #orthonal to gradient
+        x1 = x1 + slt * normalize(tagent.reshape(1,-1))[0]
+        while(not (kr_model.predict_single(x1) - inter_x1_energy) < 0.5):
+        #gradient desending to return to desired energy level
+            if kr_model.predict_single(x1) > inter_x1_energy:
+                x1 -= slt * normalize(G(x1).reshape(1,-1))[0]
+            else:
+                x1 += slt * normalize(G(x1).reshape(1,-1))[0]
+            print('Now you should be closer to origin energy : ', kr_model.predict_single(x1))
+        trace_x1.append(x1)
+        print('Cooool! Add a point in contour : ', x1)
+        if math.hypot(x1[0] - intersec_point_x1[0],x1[1] - intersec_point_x1[1]) < 0.1:
+            break
+    """
+    #This is for the other contour line
+    while(not (kr_model.predict_single(x2) - origin_energy) < 1): 
+        #gradient desending
+        if kr_model.predict_single(x2) > origin_energy:
+            x2 -= slt * normalize(G(x2).reshape(1,-1))[0]
+        else:
+            x2 += slt * normalize(G(x2).reshape(1,-1))[0]
+        print('Now you should be closer to origin energy : ', kr_model.predict_single(x2))
+    """
+    while(True):
+        tagent = np.array([G(x2)[1], -G(x2)[0]])    #orthonal to gradient
+        x2 = x2 + slt * normalize(tagent.reshape(1,-1))[0]
+        while(not (kr_model.predict_single(x2) - inter_x2_energy) < 0.5):
+        #gradient desending
+            if kr_model.predict_single(x2) > inter_x2_energy:
+                x2 -= slt * normalize(G(x2).reshape(1,-1))[0]
+            else:
+                x2 += slt * normalize(G(x2).reshape(1,-1))[0]
+            print('Now you should be closer to origin energy : ', kr_model.predict_single(x2))
+        trace_x2.append(x2)
+        print('Cooool! Add a point in contour : ', x2)
+        if math.hypot(x2[0] - intersec_point_x2[0],x2[1] - intersec_point_x2[1]) < 0.1:
+            break
+    
+    
 
 
 def find_saddle(x):
@@ -40,31 +133,38 @@ def find_saddle(x):
             tagent = np.array([orthon[1], -orthon[0]])    #searching direction
                 
             x_new = x + sl * normalize(tagent.reshape(1,-1))[0]
+            #print('X_NEW is : ', x_new)
             #print("Gradient of new pont is : ",G(x_new))
             #print("\nEgienvalue isssssssssssssssssss : ",np.linalg.eigvals(H(x_new)))
             #time.sleep(1)
             trace.append(x_new)
-            
+            """
             while not (abs(G(x_new)[0]) < 0.5):
                 direc_derive = np.dot(H(x_new)[0], normalize(orthon.reshape(1,-1))[0])
-                print('direc_derive is : ', direc_derive)
+                #print('direc_derive is : ', direc_derive)
+                x_old = x_new
                 #step length is soo tiny!
                 x_new = x_new - 0.001 * direc_derive * normalize(orthon.reshape(1,-1))[0]
+                if abs(G(x_new)[0]) > abs(G(x_old)[0]):
+                    x_new = x_old
+                    break
                 print('X_new is : ', x_new)
                 corrector.append(x_new)   
                 print('Gradient of x_new is : ', G(x_new))
             print('corrector step is finished!\n')
+            """
             x = x_new
     except ValueError as e:
         print('Gradient and Hessian are : ', G(x),'\n', H(x))
         print('X_new is : ', x_new)
         print("x is : ", x)
         return
-        #print("G(x) is : ", G(x), " H(x) is : ", H(x))
-    
+        #print("G(x) is : ", G(x), " H(x) is : ", H(x))   
     return x
 
-#trace = [x for x in trace if ((abs(G(x)[0] - 0) < 0.15) and (abs(G(x)[1]) < 0.1) and (np.linalg.eigvals(H(x)).prod() < 0))]
+#def corrector_step(x):
+    
+#trace = [x for x in trace if ((abs(G(x)[0] - 0) < 0.2) and (abs(G(x)[1]) < 0.2) and (np.linalg.eigvals(H(x)).prod() < 0))]
 
 if __name__ == '__main__':
     #print('still okay here? Manager Object is created successfully!')
@@ -100,6 +200,7 @@ if __name__ == '__main__':
     kernel = 'gaussian'          #choose kernel function. More kernels see here  http://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.pairwise_kernels.html
     try:
         kr = KernelRegression(kernel=kernel, bandwidth=0.7, radius=3)
+        #sys.exit(1)
     except BaseException as e:
         print("What's wrong with kernel reg?")
     kr_model = kr.fit(np.delete(points, 2, 1), energy)   #build kernel regression modle from data points
@@ -109,7 +210,9 @@ if __name__ == '__main__':
     H = nd.Hessian(f)   #Hessian 
     G = nd.Gradient(f)  #Gradient
     print(H)
-    #sys.exit(0)
+    #time.sleep(10)
+
+    sys.exit(0)
     
     
     
@@ -177,3 +280,29 @@ if __name__ == '__main__':
     pickle.dump(fig,ge)    
     #fig.colorbar(surf, shrink=0.5, aspect=5)
     fig.savefig(r'C:\Users\Administrator\Desktop\saddle_points' + kernel + '_.png')
+    
+    
+    
+    
+    
+    
+    
+    
+    """
+    origin_grids = pickle.load(open(r'C:\Users\Administrator\Desktop\origin_grid.pickle','rb'))
+    c = cntr.Cntr(origin_grids[:,0].reshape(390,414), origin_grids[:,1].reshape(390,414), origin_grids[:,3].reshape(390,414))
+    res = c.trace(-6500)
+    # result is a list of arrays of vertices and path codes
+    # (see docs for matplotlib.path.Path)
+    nseg = len(res) // 2
+    segments, codes = res[:nseg], res[nseg:]
+
+    p = plt.Polygon(segments[0], fill=False, color='w')
+    ax.add_artist(p)
+    
+    
+    
+    
+    
+    ax.scatter(np.array(trace_x1[:,0]), np.array(trace_x1[:,1]))
+    """
