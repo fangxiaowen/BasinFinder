@@ -20,6 +20,7 @@ import time
 from matplotlib import _cntr as cntr
 
 intersec_point_x1, intersec_point_x2 = 0,0
+# accurate saddles are stored as exact_saddles.pickle
 def find_exact_saddle(x):
     """
     start from approximate saddle point and find it's conresponding accurate saddle point
@@ -41,6 +42,7 @@ def find_exact_saddle(x):
         print('Gradient of x is : ', G(x))
     return x
 
+trace_x1, trace_x2 = [], []
 def find_contour(x):
     """
     start from saddle and find contour passing the saddle
@@ -55,11 +57,13 @@ def find_contour(x):
     origin_energy = kr_model.predict_single(x)
     #origin_energy = -6562
     print('Origin energy is : ', origin_energy)
-    egienvector = np.linalg.eig(H(x))[1][1]
+    egienvalue = np.linalg.eig(H(x))[0]    
+    egienvector = np.linalg.eig(H(x))[1][0] if egienvalue[0] < 0 else np.linalg.eig(H(x))[1][1]  # egienvalue corresponding to negtive egienvalue
     x1, x2 = x + 0.5*egienvector, x - 0.5*egienvector
     intersec_point_x1, intersec_point_x2 = x1, x2
     inter_x1_energy, inter_x2_energy = kr_model.predict_single(intersec_point_x1), kr_model.predict_single(intersec_point_x2)
     slt = 0.1
+    i = 0
     #trace_x1, trace_x2 = [], []
     """
     while(not (kr_model.predict_single(x1) - origin_energy) < 1): 
@@ -70,7 +74,8 @@ def find_contour(x):
             x1 += slt * normalize(G(x1).reshape(1,-1))[0]
         print('Now you should be closer to origin energy : ', kr_model.predict_single(x1))
     """
-    while(True):
+    while(i < 1500):
+        i += 1
         tagent = np.array([G(x1)[1], -G(x1)[0]])    #orthonal to gradient
         x1 = x1 + slt * normalize(tagent.reshape(1,-1))[0]
         while(not (kr_model.predict_single(x1) - inter_x1_energy) < 0.5):
@@ -79,11 +84,12 @@ def find_contour(x):
                 x1 -= slt * normalize(G(x1).reshape(1,-1))[0]
             else:
                 x1 += slt * normalize(G(x1).reshape(1,-1))[0]
-            print('Now you should be closer to origin energy : ', kr_model.predict_single(x1))
+            #print('Now you should be closer to origin energy : ', kr_model.predict_single(x1))
         trace_x1.append(x1)
-        print('Cooool! Add a point in contour : ', x1)
+        #print('Cooool! Add a point in contour : ', x1)
         if math.hypot(x1[0] - intersec_point_x1[0],x1[1] - intersec_point_x1[1]) < 0.1:
-            break
+            if i > 10:
+                break
     """
     #This is for the other contour line
     while(not (kr_model.predict_single(x2) - origin_energy) < 1): 
@@ -94,7 +100,9 @@ def find_contour(x):
             x2 += slt * normalize(G(x2).reshape(1,-1))[0]
         print('Now you should be closer to origin energy : ', kr_model.predict_single(x2))
     """
-    while(True):
+    i = 0
+    while(i < 1500):     #  might go back to the first point!!
+        i += 1
         tagent = np.array([G(x2)[1], -G(x2)[0]])    #orthonal to gradient
         x2 = x2 + slt * normalize(tagent.reshape(1,-1))[0]
         while(not (kr_model.predict_single(x2) - inter_x2_energy) < 0.5):
@@ -103,11 +111,12 @@ def find_contour(x):
                 x2 -= slt * normalize(G(x2).reshape(1,-1))[0]
             else:
                 x2 += slt * normalize(G(x2).reshape(1,-1))[0]
-            print('Now you should be closer to origin energy : ', kr_model.predict_single(x2))
+            #print('Now you should be closer to origin energy : ', kr_model.predict_single(x2))
         trace_x2.append(x2)
-        print('Cooool! Add a point in contour : ', x2)
+        #print('Cooool! Add a point in contour : ', x2)
         if math.hypot(x2[0] - intersec_point_x2[0],x2[1] - intersec_point_x2[1]) < 0.1:
-            break
+            if i > 10:
+                break
     
     
 
