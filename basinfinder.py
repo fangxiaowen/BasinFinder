@@ -108,7 +108,7 @@ def Basin_Finder(S, c, Omega, delta2, colormap, job_list, basins, jump):
     print('compting points under c takes : ', f_under - s_under)
     print('# of points after decending energy : ', len(S))
     
-    if len(S) < 3:    #Just want to end it earlier if less than 100 points in a high energy level
+    if (len(S) < 100 and c > -6368) or len(S) < 3:    #Just want to end it earlier if less than 100 points in a high energy level
         print('Unimportant basin. I am returning', len(S), c)  #Debug message
         return    
     try:

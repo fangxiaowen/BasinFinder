@@ -134,8 +134,11 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         kernel = KERNEL_DICT[self.kernel]
         
         li = []
-        ind = self.tree.query_radius(X, r=self.radius)
-        
+        try:
+            ind = self.tree.query_radius(X, r=self.radius)
+        except ValueError as e:
+            print('WTF??? : ', X)
+            sys.exit(0)
         for i in range(len(X)):
         #compute kernel between grid point and all the data points near it
             try:
@@ -148,6 +151,14 @@ class KernelRegression(BaseEstimator, RegressorMixin):
                 print('The lonely grid point is', X[i])
                 sys.exit()
             try:
+                #print(K)
+                #print("sum of K? ", np.sum(K))
+                #if np.sum(K) == 0:
+                    #print("How the fuck could this be?", K)
+                    #print("ind is ? ", ind)
+                    #print("neighbors ? ", Y)
+                    #print('Now X[i] is : ',i,"   ", X[i])
+                    #sys.exit(1)
                 estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
                 li.append(estimator)
             except ValueError as e:

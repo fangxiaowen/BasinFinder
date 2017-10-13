@@ -17,6 +17,8 @@ import multiprocessing
 import os
 import time, threading
 import sys
+import rpy2.robjects as robjects
+import pickle
 
 
 """
@@ -30,10 +32,10 @@ Notes on how to make it faster:
 """
 
 if __name__ == '__main__':
-    multiprocessing.freeze_support()
+    #multiprocessing.freeze_support()
     print('oaky here?')
-    manager = Manager()
-    lock = Lock()
+    #manager = Manager()
+    #lock = Lock()
     print('still okay here? Manager Object is created successfully!')
     
     s_loadData = clock()    #timing
@@ -60,7 +62,7 @@ if __name__ == '__main__':
     xgrids =    np.arange(xgridlow - gsz, xgridhigh, gsz)
     ygrids =    np.arange(ygridlow - gsz, ygridhigh, gsz)                    #use generator or numpy
     origin_grids = [[x , y] for x in xgrids for y in ygrids]    #origin grid points, could use numpy
-    #origin_grids = [[p[0], p[1], i] for i, p in enumerate(origin_grids)]
+    origin_grids = np.array([[p[0], p[1], i] for i, p in enumerate(origin_grids)])
     native_grids = np.array([p for p in origin_grids if geometry.Point(p).within(concave_hull)])      #grid points only in the alpha shape
     native_grids = np.array([[p[0], p[1], i] for i,p in enumerate(native_grids)])
     e_grid = clock()        #timing
@@ -80,7 +82,8 @@ if __name__ == '__main__':
     m_krModel = clock()         #timing
     print('Fitting model takes: ', m_krModel - s_krModel)
     #try:
-    grid_energy = kr_model.parallel_predict(np.delete(native_grids,2,1), n_jobs=-1)   #predict energy of grid points
+    grid_energy = kr_model.parallel_predict(np.delete(origin_grids,2,1), n_jobs=-1)   #predict energy of grid points
+    print(grid_energy)
     #except BaseException as e:
     #    print("Prediction is wrong!")
     c_min = np.amin(grid_energy)
@@ -89,25 +92,26 @@ if __name__ == '__main__':
     print('Predicting grid energy takes(%s): ' %(kernel), e_krModel - m_krModel)
     #Now we finnaly get grid points and their energy value.
     
-    native_grids = np.insert(native_grids, 3, grid_energy, axis=1)
+    origin_grids = np.insert(origin_grids, 3, grid_energy, axis=1)
     print('Good to share grids and grid energy?')
     #native_grids = manager.list(native_grids)   #make native_grids shared between processes
-    grid_energy = manager.list(grid_energy)
+    #grid_energy = manager.list(grid_energy)
     print('Good! grids and grid energy shared!')
-    #ge = open(r'C:\Users\Administrator\Desktop\grid_energy.txt','wb')
-    #pickle.dump(grid_energy, ge)
-    #ge.close()
-
+    
+    ge = open(r'C:\Users\Administrator\Desktop\origin_grid.pickle','wb')
+    pickle.dump(origin_grids, ge)
+    ge.close()
+    sys.exit(0)
     #load grid energy data from file. So we don't need to regenerate it every time
-    #ge = open(r'C:\Users\Administrator\Desktop\grid_energy.txt', 'rb')
-    #grid_energy = pickle.load(ge)
+    ge = open(r'C:\Users\Administrator\Desktop\native_grid.pickle', 'rb')
+    native_grids = pickle.load(ge)
     #ge.close()
     
     
     #Generate some plot
 
     #This the the color map
-    norm = mpl.colors.Normalize(vmin=-6670, vmax=-6350)
+    norm = mpl.colors.Normalize(vmin=-6650, vmax=-6410)
     cmap = cm.jet
     m = cm.ScalarMappable(norm=norm, cmap=cmap)
 
@@ -119,13 +123,18 @@ if __name__ == '__main__':
     ax.set_xlim([x_min-margin, x_max+margin])
     ax.set_ylim([y_min-margin, y_max+margin])
     patch = PolygonPatch(concave_hull, fc=m.to_rgba(-6270), ec='#000000', fill=True, zorder=-1)
-    #np_grids = np.array(native_grids)
+    np_grids = np.array(native_grids)
     ax.add_patch(patch)
-    #surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
+    surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
     #surf2 = ax.scatter(points[:,0], points[:,1], c=energy, cmap=cm.jet)
     
-    #fig.colorbar(surf, shrink=0.5, aspect=5)
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+    
+    ge = open(r'C:\Users\Administrator\Desktop\grid_energy.pickle', 'wb')
+    pickle.dump(fig,ge)
     #fig.savefig(r'C:\Users\Administrator\Desktop\kernelReg_' + kernel + '_.png')
+    sys.exit(0)
+    
     #Run it
     print('Okay to create basins list?')
     job_list = manager.Queue(10)
@@ -136,9 +145,9 @@ if __name__ == '__main__':
     p = Pool(4)
     
     s_basin = clock()
-    Basin_Finder(native_grids, -6403, Omega, 0.3, m, job_list, basins, True)
+    Basin_Finder(native_grids, -6300, Omega, 0.3, m, job_list, basins, True)
     
-    wait_for_job = 160
+    wait_for_job = 300
     
 
     done = False
