@@ -26,14 +26,13 @@ def alpha_shape(points, alpha):
         don't fall inward as much as larger numbers.
         Too large, and you lose everything!
     """
-    print('Now you are in alpha shape computing process')
     if len(points) < 4:
         # When you have a triangle, there is no sense
         # in computing an alpha shape.
         try:
             return geometry.MultiPoint(list(points)).convex_hull
         except BaseException as e:
-            print('Fuck you! They are on the same line!', points)
+            print('F***! They are on the same line!', points)
             print('numpy.float64 is ', points)
     def add_edge(edges, edge_points, coords, i, j):
         """
@@ -84,19 +83,19 @@ def alpha_shape(points, alpha):
 #The main basin finder algorithm
 def Basin_Finder(S, c, Omega, delta2, colormap, job_list, basins, jump):
     """
-    The main algorithm to find basins and saddles
+    The main algorithm to find basins (and saddles, not implement yet)
 
     Parameters
     ----------
     S : set of grid points under certain energy level (c).
     c : highest energy level
-    Omega : list of basins and saddles
+    Omega : list of basins and saddles to be stored
     delta2 : step length c decreases
     """
     #global basins
     
     print('now you are in basin_finder')
-    if c < -6368:       #no jump after certain level
+    if c < -6368:       #no jump below certain level
         jump = False
     S_origin = np.copy(S)
     #Jump test
