@@ -38,7 +38,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
 
 
     def __init__(self, kernel="gaussian", bandwidth=0.7, radius=3):
-            # Helper functions - distance
+        # Helper functions - distance
         
         #self.kernel = self.kernel_dict[kernel]
         self.kernel = kernel
@@ -66,13 +66,21 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         return self
 
     def predict_single(self, X):
+        """
+        just estimate/predict the energy of a single point
+        """
         X = X.reshape(1,-1)
         assert(len(X) == 1)
         return self.predict(X)[0]
     
     #gradient of a point
     def fprime(self, X):
-        #print('X is : ', X)
+        """
+        You could ignore this method. 
+        This is trying to derive the formula of the gradient of the energy function. 
+        Xiaowen Fang gives up doing this because he found a numerical module online to compute the gradient.
+        But anyone is welcome to finish this. Please contact Prof Wanli Qiao to get more information.
+        """
         X = X.reshape(1,-1)
         assert(len(X) == 1)
         try:
@@ -102,7 +110,13 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         
         return np.array((fxn, fyn))
     
+    
+    
+    
     def predict(self, X):
+        """
+        Estimate/predict energy of a point. Using the method proposed by Amarda & Wanli in their BIBM 2017 paper.
+        """
         def gaussian_kernel(x, Y):
             dist = distance.cdist(x,Y)
             dist = - dist**2 / (2* self.bandwidth**2)
@@ -133,6 +147,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         'triweight' : triweight_kernel }
         kernel = KERNEL_DICT[self.kernel]
         
+        
         li = []
         try:
             ind = self.tree.query_radius(X, r=self.radius)
@@ -140,7 +155,7 @@ class KernelRegression(BaseEstimator, RegressorMixin):
             print('WTF??? : ', X)
             sys.exit(0)
         for i in range(len(X)):
-        #compute kernel between grid point and all the data points near it
+        #compute kernel between grid point and all the points near it
             try:
                 #K = pairwise_kernels(X[i].reshape(1,len(X[i])), self.X[ind[i]], metric=self.kernel, filter_params=True, gamma=0.7)
                 Y = self.X[ind[i]]
@@ -162,11 +177,11 @@ class KernelRegression(BaseEstimator, RegressorMixin):
                 estimator = np.inner(K, self.y[ind[i]]) / np.sum(K) 
                 li.append(estimator)
             except ValueError as e:
-                print('What is wrong with kernel reg? ', K)
+                print('What is wrong with kernel regression? ', K)
         return li
         
     def parallel_predict(self, X, n_jobs):
-        """Predict target values for X.
+        """
         Parameters
         ----------
         X : array-like of shape = [n_samples, n_features]
@@ -176,9 +191,8 @@ class KernelRegression(BaseEstimator, RegressorMixin):
         y : array of shape = [n_samples]
             The predicted target value.
         
-        n_jobs : level of parallelism
+        n_jobs : The number of jobs you want to run in parallel. See sklearn for how to use it.
         """
-            
         if n_jobs < 0:
             n_jobs = max(cpu_count() + 1 + n_jobs, 1)
         
