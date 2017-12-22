@@ -1,200 +1,145 @@
 # -*- coding: utf-8 -*-
-
-__author__ = 'Xiaowen Fang'
-
-from scipy.spatial import Delaunay
+from basinfinder import alpha_shape, Basin_Finder
+from descartes import PolygonPatch
 import numpy as np
 import shapely.geometry as geometry
-from shapely.ops import cascaded_union, polygonize
+#from shapely.ops import cascaded_union, polygonize
 import math
-#import matplotlib.pyplot as plt
-from descartes import PolygonPatch
-#from matplotlib  import cm
-import sys
+from kernelregression import KernelRegression     #This is the kd_tree version written by Xiaowen Fang
+#import rpy2.robjects as robjects
+import matplotlib.pyplot as plt
+from matplotlib  import cm
+import matplotlib as mpl
+import pickle
+from time import clock
 from multiprocessing import Process, Manager, Array, Pool, Lock
 import multiprocessing
-from time import clock
-
-#This is also from http://blog.thehumangeo.com/2014/05/12/drawing-boundaries-in-python/
-def alpha_shape(points, alpha):
-    """
-    Compute the alpha shape (concave hull) of a set
-    of points.
-    @param points: Iterable container of points.
-    @param alpha: alpha value to influence the
-        gooeyness of the border. Smaller numbers
-        don't fall inward as much as larger numbers.
-        Too large, and you lose everything!
-    """
-    if len(points) < 4:
-        # When you have a triangle, there is no sense
-        # in computing an alpha shape.
-        try:
-            return geometry.MultiPoint(list(points)).convex_hull
-        except BaseException as e:
-            print('F***! They are on the same line!', points)
-            print('numpy.float64 is ', points)
-    def add_edge(edges, edge_points, coords, i, j):
-        """
-        Add a line between the i-th and j-th points,
-        if not in the list already
-        """
-        if (i, j) in edges or (j, i) in edges:
-            # already added
-            return
-        edges.add( (i, j) )
-        edge_points.append(coords[[i,j]])
-    coords = np.array(points)
-    tri = Delaunay(coords)
-    edges = set()
-    edge_points = []
-    # loop over triangles:
-    # ia, ib, ic = indices of corner points of the
-    # triangle
-    for ia, ib, ic in tri.simplices:
-        pa = coords[ia]
-        pb = coords[ib]
-        pc = coords[ic]
-        # Lengths of sides of triangle
-        a = math.sqrt((pa[0]-pb[0])**2 + (pa[1]-pb[1])**2)
-        b = math.sqrt((pb[0]-pc[0])**2 + (pb[1]-pc[1])**2)
-        c = math.sqrt((pc[0]-pa[0])**2 + (pc[1]-pa[1])**2)
-        # Semiperimeter of triangle
-        s = (a + b + c)/2.0
-        try:    #could have ZeroDivisionError and ValueError
-            # Area of triangle by Heron's formula
-            area = math.sqrt(s*(s-a)*(s-b)*(s-c))
-            circum_r = a*b*c/(4.0*area)
-            # Here's the radius filter.
-            if circum_r < 1.0/alpha:
-                add_edge(edges, edge_points, coords, ia, ib)
-                add_edge(edges, edge_points, coords, ib, ic)
-                add_edge(edges, edge_points, coords, ic, ia)
-        except ZeroDivisionError as e:
-            print("So points are? ", ia, ib, ic)
-        except ValueError as e:
-            print('a is %f, b is %f, c is %f, s is %f' %(a,b,c,s))
-    m = geometry.MultiLineString(edge_points)
-    triangles = list(polygonize(m))
-    #return the union of polygons in this alpha shape
-    return cascaded_union(triangles), edge_points
+import os
+import time, threading
+import sys
+import pickle
 
 
-#The main basin finder algorithm
-def Basin_Finder(S, c, Omega, delta2, colormap, job_list, basins, jump):
-    """
-    The main algorithm to find basins (and saddles, not implement yet)
+"""
 
-    Parameters
-    ----------
-    S : set of grid points under certain energy level (c).
-    c : highest energy level
-    Omega : list of basins and saddles to be stored
-    delta2 : step length c decreases
-    """
-    #global basins
-    
-    print('now you are in basin_finder')
-    if c < -6368:       #no jump below certain level
-        jump = False
-    S_origin = np.copy(S)
-    #Jump test
-    c = (c - delta2 * 50) if jump else (c - delta2) 
-    print('This is C! ', c)
-    s_under = clock()
-    S = np.array([p for p in S if p[3] < c])      #points with energy less than c. Could be faster? Must be faster! Optimize this!
-    f_under = clock()
-    print('compting points under c takes : ', f_under - s_under)
-    print('# of points after decending energy : ', len(S))
-    
-    if (len(S) < 100 and c > -6368) or len(S) < 3:    #Just want to end it earlier if less than 100 points in a high energy level
-        print('Unimportant basin. I am returning', len(S), c)  #Debug message
-        return    
+Notes on how to make it faster:
+    1. Use parallel computing if possible. Including map/reduce and multiprocessing and multithreading.
+    2. Use async if possible
+    3. Use functional programming / module from third party to reduce code
+    4.
+"""
+
+if __name__ == '__main__':
+
+    #load data from the .txt file. Ras_WT_SoPrimp_2016.txt is file containing the origin protein data.
+    protein_data = np.dtype([('col1', 'S20'), ('col2', 'S20'),('col3', 'S20'), ('energy', 'f4'), ('col5', 'f4'), ('col6', 'f4'),('col7', 'f4'),('col8', 'f4'),('col9', 'f4'),('col10', 'f4'),('col11', 'f4'),('col12', 'f4'),('col13', 'f4'),('col14', 'f4'),('col15', 'f4')])
+    sample_points = np.loadtxt(r"C:\Users\Administrator\Desktop\BasinFinder\Ras_WT_SoPrimp_2016.txt", dtype = protein_data)           #load data
+
+
+    #Extrac features we care about. We only care energy (column 4) and other 2 features (column 6 & 7)
+    energy = np.array([e[3] for e in sample_points])         # energy of protein
+    points = np.array([[p[5], p[6], i] for i, p in enumerate(sample_points)])              #other 2 features we care (Princeple Component 1 & 2)        #points = np.array([[p[5], p[6]] for p in sample_points])
+
+    print("building convex hull")
+    #Draw the alpha shape of all data points
+    concave_hull, edge_points = alpha_shape(np.delete(points, 2, 1), alpha=0.6)    #concave_hull contains all the polygons in the alpha shape (all the boundary)
+
+    print("generating grid points")
+    # generate grid points, [pc1, pc2] with grid size(gsz) which are within the alpha shape
+    gsz = 0.1 #Grid size. Could be user input.
+    xgridlow, ygridlow, xgridhigh, ygridhigh = concave_hull.bounds
+    xgrids =    np.arange(xgridlow - gsz, xgridhigh, gsz)
+    ygrids =    np.arange(ygridlow - gsz, ygridhigh, gsz)                    #use generator or numpy
+    origin_grids = [[x , y] for x in xgrids for y in ygrids]    # grid points.
+    origin_grids = np.array([[p[0], p[1], i] for i, p in enumerate(origin_grids)])
+    native_grids = np.array([p for p in origin_grids if geometry.Point(p).within(concave_hull)])      #grid points only within the alpha shape
+    native_grids = np.array([[p[0], p[1], i] for i,p in enumerate(native_grids)])                   #grid points only within the alpha shape and having index. i is index
+
+    print("estimate energy")
+    # use kernel regression to estimate energy of grid points
+    kernel = 'gaussian'          #choose kernel function. More kernels see here  http://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.pairwise_kernels.html
     try:
-        s_ashape = clock()
-        bounds, edge_points = alpha_shape(np.delete(S, [2,3], 1), alpha=1/0.15)    #alpha shape
-        f_ashape = clock()
-        print('computing alpha shape takes : ', f_ashape - s_ashape)
+        kr = KernelRegression(kernel=kernel, bandwidth=0.7, radius=3)
     except BaseException as e:
-        print("What's wrong with S : ", S)
-        return    
-            
-    k = 1 if not isinstance(bounds, geometry.multipolygon.MultiPolygon) else len(bounds)    #weather it's a single polygon or multiple polygons in the alpha shape
+        print("What's wrong with kernel regression?")
 
-    #no basin splitting detected
-    print('# of basin in this iteration is ', k)   #Debug message
-    if k == 1:
-        print('Still no basin splitting. And continue the previous action!')
-        print('# of points left is : ', len(S))
-        
-        job_list.put((k,S,c,jump))     #no basin splitting. So still follow the jump condition as before
-        
-        print('We put you in job_list, continue the same action')
-        
-    #basin splitting detected
-    else:
-        if jump:    # So we need to revert back
-            print('Ohhh! We need to revert back!')
-            c += 49 * delta2
-            s_under = clock()
-            S = [p for p in S_origin if p[3] < c]      #points with energy less than c. Could be faster? Must be faster! Optimize this!
-            f_under = clock()
-            print('compting points under c takes : ', f_under - s_under)
-            print('# points left after reverting back should be greater than before : ', len(S))
-            try:
-                s_ashape = clock()
-                bounds, edge_points = alpha_shape(np.delete(S, [2,3], 1), alpha=1/0.15)    #alpha shape
-                f_ashape = clock()
-                print('computing alpha shape takes : ', f_ashape - s_ashape)   
-            except BaseException as e:
-                print("What's wrong with S : ", S)
-                return  
-            k = 1 if not isinstance(bounds, geometry.multipolygon.MultiPolygon) else len(bounds)    #weather it's a single polygon or multiple polygons in the alpha shape
-            if k == 1:
-                print('Oh! Not find basin after revert back! So we need to decend carefully to find basin')
-                print('So # of points is : ', len(S))
-                job_list.put((k,S,c,False))  #decending carefully until you find me!
-                print('We put you in job_list, decending carefully')
-                #patch = PolygonPatch(bounds, fc=colormap.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
-                #basins.append(patch)
-            else:   #Ohhh! You find me!
-                print('Good! you find me right after revert back!')
-                old_S = S[:]
-                S = []
-                for i in range(k):
-                    points_in_basin = [p.tolist() for p in old_S if geometry.Point([p[0], p[1]]).within(bounds[i])]
-                    #print('WTF??? points in basin is :', points_in_basin)
-                    job_list.put_nowait((k,points_in_basin,c, True))    # k is meaningless. Should delete k
-                    print('Put you in job_list. You are so lucky! ', i)
-                    old_S = [p for p in old_S if p.tolist() not in points_in_basin]
-                    
-                    #print('We put stuff into jobList! VeryGood! So are you empty now? ', job_list.empty())
+    # Fit the kernel regression model with sample points. And use fitted model to estimate energy of grid points
+    kr_model = kr.fit(np.delete(points, 2, 1), energy)   #build kernel regression modle from data points
+    # Estimate/predict energy of grid points
+    grid_energy = kr_model.parallel_predict(np.delete(native_grids,2,1), n_jobs=-1)   #predict energy of grid points
+    print(grid_energy)
 
-        else:   #no need to revert
-            #get points in different basins. Stored in S   
-            print('Find basins and no need to revert back')
-            old_S = S[:]
-            S = []
-            for i in range(k):
-                print('!!!!!!! # of K is ', k)
-                points_in_basin = [p.tolist() for p in old_S if geometry.Point([p[0], p[1]]).within(bounds[i])]
-                job_list.put((k,points_in_basin,c,True))
-                old_S = [p for p in old_S if p.tolist() not in points_in_basin]
-                    #print('How many points in each basin? ', len(x))
-                    #print('We got points in a basin! Very good!')
-                    #S.append(points_in_basin)     #append the points in a polygon
-                print('Put you in job_list. Finally find you, basin!  ',  i)
-                #print('We put stuff into jobList! VeryGood! So are you empty now? ', job_list.empty())
-        #get saddles between neighbor basins
-        #Could speed up by this way https://gis.stackexchange.com/questions/226085/fast-minimum-distance-between-two-sets-of-polygons/226143#226143
 
-        #Pseudo code below. To be done
-    
+    sys.exit(0)
+    c_min = np.amin(grid_energy)
+    print('c_min is  : ', c_min)
+    #Till now we finnaly get grid points and their energy value.
+    native_grids = np.insert(native_grids, 3, grid_energy, axis=1)  #insert energy column to grid points
 
-    if k > 1:
-        for i in range(k):
-            patch = PolygonPatch(bounds[i], fc=colormap.to_rgba(c), ec='#000000', fill=True, zorder=-1)  #Here, map c value to color code using color map
-            basins.append(patch)    
-            print('We add a patch/basin!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    return
 
+    # save grid points to disk. So we can load it when we need it instead of computing it every time
+    ge = open(r'C:\Users\Administrator\Desktop\native_grid.pickle','wb')
+    pickle.dump(native_grids, ge)
+    ge.close()
+    #load grid energy data from file. So we don't need to regenerate it every time
+    ge = open(r'C:\Users\Administrator\Desktop\native_grid.pickle', 'rb')
+    native_grids = pickle.load(ge)
+    ge.close()
+
+
+    #Generate some plot
+    norm = mpl.colors.Normalize(vmin=-6650, vmax=-6410)         #This the the color map
+    cmap = cm.jet
+    m = cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    fig = plt.figure(figsize=(10,10))       #This is the figure we want
+    ax = fig.add_subplot(111)
+    margin = .3
+    x_min, y_min, x_max, y_max = concave_hull.bounds
+    ax.set_xlim([x_min-margin, x_max+margin])
+    ax.set_ylim([y_min-margin, y_max+margin])
+    patch = PolygonPatch(concave_hull, fc=m.to_rgba(-6270), ec='#000000', fill=True, zorder=-1)
+    np_grids = np.array(native_grids)
+    ax.add_patch(patch)
+    surf = ax.scatter(np_grids[:,0], np_grids[:,1], c=grid_energy, cmap=cm.jet)
+    #surf2 = ax.scatter(points[:,0], points[:,1], c=energy, cmap=cm.jet)
+
+    fig.colorbar(surf, shrink=0.5, aspect=5)
+
+    ge = open(r'C:\Users\Administrator\Desktop\grid_energy.pickle', 'wb')
+    pickle.dump(fig,ge)
+    #fig.savefig(r'C:\Users\Administrator\Desktop\kernelReg_' + kernel + '_.png')
+    sys.exit(0)
+
+
+    # Now we create basin based on the grid points. We do this via multiprocessing (though multiprocessing won't speed up too much...)
+    manager = Manager()
+    job_list = manager.Queue(10)
+    basins = manager.list()
+    Omega = manager.list()
+
+    p = Pool(4)
+
+    s_basin = clock()
+    #Basin_Finder(native_grids, -6300, Omega, 0.3, m, job_list, basins, True)
+    wait_for_job = 300
+
+    done = False
+    while not done:
+        try:
+            k, S, c, jump = job_list.get(True, wait_for_job)
+            p.apply_async(Basin_Finder, args=(S, c, Omega, 0.3, m, job_list, basins, jump))
+        except BaseException as e:
+            print('Done')
+            done = True
+    p.close()
+    p.join()
+
+    for basin in basins:
+        ax.add_patch(basin)
+        #print('okay now I add one patch')
+    print('how many basins? ', len(basins))
+    f_basin = clock()
+    print('Basin Finder takes(with multiprocessing) : ', f_basin - s_basin)
+
+    fig.savefig(r'C:\Users\Administrator\Desktop\grid_energy_6.png')
